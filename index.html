@@ -3816,9 +3816,9 @@ const CONFLICT='The cloud has newer data from another device, or this device has
 /* ---- push (device -> cloud) ---- */
 let pushing=false,again=false,dirtyN=0,timer=null;const last={};
 function markDirty(){LS.setItem('fb_dirty','1');dirtyN++;stat('\u2601 Saving...');clearTimeout(timer);timer=setTimeout(()=>push(),1200)}
-async function push(force){
+async function push(force,boot){
  if(pushing){again=true;return}
- await ready;pushing=true;const n0=dirtyN;
+ if(!boot)await ready;pushing=true;const n0=dirtyN;
  try{
   stat('\u2601 Saving...');
   const ms=await F.getDoc(D('meta'));const m=ms.exists()?ms.data():{ts:0};m.keys=m.keys||{};m.files=m.files||{};
@@ -3862,10 +3862,10 @@ async function pull(m){
 /* ---- first load of a browser session ---- */
 async function startupSync(){
  const ms=await F.getDoc(D('meta')),dirty=LS.fb_dirty==='1',synced=+LS.fb_ts||0;
- if(!ms.exists()){if(hasLocal())await push(true);return}
+ if(!ms.exists()){if(hasLocal())await push(true,true);return}
  const m=ms.data();
- if(m.ts===synced){if(dirty)await push();return}
- if((dirty||synced===0)&&hasLocal()){if(!confirm(CONFLICT)){await push(true);return}}
+ if(m.ts===synced){if(dirty)await push(false,true);return}
+ if((dirty||synced===0)&&hasLocal()){if(!confirm(CONFLICT)){await push(true,true);return}}
  await pull(m);SS.setItem('fb_ready','1');location.reload();await new Promise(()=>{});
 }
 
@@ -3885,6 +3885,7 @@ async function proceed(){
 const _sv=window.save;window.save=function(){const r=_sv.apply(this,arguments);markDirty();return r};
 const _ar=window.applyRestore;if(_ar)window.applyRestore=function(){LS.setItem('fb_dirty','1');return _ar.apply(this,arguments)};
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&LS.fb_dirty==='1'&&started)push()});
+window.fbFlush=function(){return push()};
 st.onclick=()=>{
  if(st.dataset.bad){push();return}
  if(confirm('Sign out of the cloud on this device? You will need the cloud email and password again.')){AU.signOut(auth).then(()=>{SS.clear();location.reload()})}};
@@ -3903,6 +3904,37 @@ st.onclick=()=>{
  $('fbP').addEventListener('keydown',e=>{if(e.key==='Enter')$('fbGo').click()});
  AU.onAuthStateChanged(auth,u=>{if(u){$('fbForm').style.display='none';proceed()}else{started=false;gate.style.display='flex';gtxt('Login with your cloud email and password.');$('fbForm').style.display='block'}});
 })();
+})();
+</script>
+<script>
+/* ===== V9: logout without backup popup · Forgot/Restore links only for the Admin ID ===== */
+(function(){
+ /* 1. Logout: no backup / passphrase popup. Data is already saved on this device and in the cloud. */
+ window.logout=async function(){
+  try{audit('Logout','Signed out')}catch(e){}
+  current=null;
+  try{if(window.fbFlush)await Promise.race([window.fbFlush(),new Promise(r=>setTimeout(r,2500))])}catch(e){}
+  location.reload()};
+ /* 2. "Forgot / Reset" and "Restore" links: shown only when the typed User ID is an Admin
+       (Restore is also shown on a brand-new browser that has no users yet). */
+ const f=document.getElementById('forgotLink'),r=document.getElementById('lgRestore'),inp=document.getElementById('user');
+ function upd(){
+  const v=(inp&&inp.value||'').trim(),adm=db.users.some(u=>u.role==='Admin'&&u.id===v),none=!db.users.length;
+  if(f)f.style.display=adm?'block':'none';
+  if(r)r.style.display=(adm||none)?'block':'none'}
+ if(inp){['input','change','keyup','blur'].forEach(e=>inp.addEventListener(e,upd));setInterval(upd,400)}
+ upd();
+ /* password reset on the login screen works for Admin IDs only */
+ const _o=window.openRec;
+ if(_o)window.openRec=function(){
+  _o.apply(this,arguments);
+  const sel=document.getElementById('rcUser'),typed=(inp.value||'').trim();
+  if(sel)sel.innerHTML=db.users.filter(u=>u.role==='Admin').map(u=>'<option value="'+esc(u.id)+'"'+(u.id===typed?' selected':'')+'>'+esc(u.id)+' · Admin'+(u.active===false?' (disabled)':'')+'</option>').join('')};
+ const _d=window.doRecover;
+ if(_d)window.doRecover=function(){
+  const u=db.users.find(x=>x.id===document.getElementById('rcUser').value);
+  if(!u||u.role!=='Admin'){msg('Only the Admin password can be reset here. Other users: ask the Admin to reset it in the Admin Panel.');return}
+  return _d.apply(this,arguments)};
 })();
 </script>
 </body></html>
