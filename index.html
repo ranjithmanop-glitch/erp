@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src data:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src data:; script-src 'unsafe-inline' https://www.gstatic.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://*.googleapis.com https://*.firebaseio.com https://www.gstatic.com; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ERP</title>
 <style>
 :root{--green:#341857;--green2:#522295;--mint:#ebe5f7;--bg:#f2f1f6;--card:#fff;--ink:#251932;--muted:#746c80;--line:#dfdde7;--red:#b42318}
@@ -3781,6 +3781,128 @@ V['Backup & Restore']=()=>'<div class="card" style="border-left:5px solid #52229
 /* header button */
 const _r=window.render;
 window.render=function(){const r=_r.apply(this,arguments);try{const ub=document.querySelector('.userbar');if(ub&&current&&current.role==='Admin'&&!ub.querySelector('#bkb')){const b=document.createElement('button');b.id='bkb';b.className='secondary';b.textContent='💾 Backup';b.onclick=()=>window.fullBackup();ub.insertBefore(b,ub.firstChild)}}catch(e){}return r};
+})();
+</script>
+<script>
+/* ===== FIREBASE LAYER: cloud login + Firestore sync (project erp-estimate) ===== */
+(function(){
+const CFG={apiKey:"AIzaSyAB9J64If5YusxlhrmnibfQRy922D5Z5NU",authDomain:"erp-estimate.firebaseapp.com",projectId:"erp-estimate",storageBucket:"erp-estimate.firebasestorage.app",messagingSenderId:"123327206885",appId:"1:123327206885:web:daef0458b0880d0f934b0c"};
+const LS=localStorage,SS=sessionStorage,B='https://www.gstatic.com/firebasejs/10.14.1/',CH=300000;
+let AU,F,auth,fs,started=false,readyRes;const ready=new Promise(r=>readyRes=r);
+const $=id=>document.getElementById(id);
+const css=document.createElement('style');
+css.textContent='#fbGate{position:fixed;inset:0;z-index:99999;background:linear-gradient(180deg,#341857,#522295);display:flex;align-items:center;justify-content:center;padding:16px;font-family:system-ui,sans-serif}#fbGate .bx{background:#fff;border-radius:14px;padding:24px;width:100%;max-width:380px;box-shadow:0 10px 40px #0005}#fbGate h2{margin:0 0 6px;color:#341857}#fbGate p{margin:0 0 14px;color:#746c80;font-size:13px}#fbGate input{width:100%;padding:11px;margin:5px 0 10px;border:1px solid #dfdde7;border-radius:8px;font-size:15px;box-sizing:border-box}#fbGate button{width:100%;padding:12px;border:0;border-radius:8px;background:#522295;color:#fff;font-size:15px;font-weight:600}#fbGate .er{color:#b42318;font-size:13px;min-height:18px;margin-top:8px}#fbst{position:fixed;right:8px;bottom:8px;z-index:9999;background:#fff;border:1px solid #dfdde7;border-radius:999px;padding:4px 10px;font:12px system-ui,sans-serif;color:#746c80;box-shadow:0 1px 4px #0002}@media print{#fbGate,#fbst{display:none!important}}';
+document.head.appendChild(css);
+const gate=document.createElement('div');gate.id='fbGate';
+gate.innerHTML='<div class="bx"><h2>ERP</h2><p id="fbTxt">Connecting...</p><div id="fbForm" style="display:none"><input id="fbE" type="email" placeholder="Cloud email" autocomplete="username"><input id="fbP" type="password" placeholder="Password" autocomplete="current-password"><button id="fbGo">Login</button></div><div class="er" id="fbEr"></div></div>';
+document.body.appendChild(gate);
+const st=document.createElement('div');st.id='fbst';st.textContent='\u2601 ...';document.body.appendChild(st);
+const gtxt=t=>{$('fbTxt').textContent=t},er=t=>{$('fbEr').textContent=t||''};
+function stat(t,bad){st.textContent=t;st.style.color=bad?'#b42318':'#746c80';st.dataset.bad=bad?'1':''}
+function errTxt(e){const c=(e&&e.code)||'';
+ if(/invalid-credential|wrong-password|user-not-found|invalid-email/.test(c))return 'Wrong email or password.';
+ if(c==='auth/too-many-requests')return 'Too many attempts. Try again later.';
+ if(c==='auth/network-request-failed')return 'No internet connection.';
+ if(/api-key/.test(c))return 'Firebase API key in this file is wrong.';
+ return c||(e&&e.message)||'Login failed';}
+const D=id=>F.doc(fs,'erp',id);
+const chunk=s=>{const a=[];for(let i=0;i<s.length;i+=CH)a.push(s.slice(i,i+CH));return a.length?a:['']};
+const hash=s=>{let h=5381,g=52711;for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);h=((h*33)^c)>>>0;g=((g*31)+c)>>>0}return h.toString(36)+g.toString(36)};
+const hasLocal=()=>typeof db!=='undefined'&&db.users&&db.users.length>0;
+const idbKeys=async()=>{try{const d=await idbD();return await new Promise(r=>{const q=d.transaction('d').objectStore('d').getAllKeys();q.onsuccess=()=>r(q.result||[]);q.onerror=()=>r([])})}catch(e){return[]}};
+const idbGet=async k=>{const d=await idbD();return await new Promise(r=>{const q=d.transaction('d').objectStore('d').get(k);q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)})};
+const CONFLICT='The cloud has newer data from another device, or this device has changes not yet saved.\n\nOK = use the CLOUD data (changes on this device that are not saved are lost)\nCancel = keep THIS device\'s data and overwrite the cloud';
+
+/* ---- push (device -> cloud) ---- */
+let pushing=false,again=false,dirtyN=0,timer=null;const last={};
+function markDirty(){LS.setItem('fb_dirty','1');dirtyN++;stat('\u2601 Saving...');clearTimeout(timer);timer=setTimeout(()=>push(),1200)}
+async function push(force){
+ if(pushing){again=true;return}
+ await ready;pushing=true;const n0=dirtyN;
+ try{
+  stat('\u2601 Saving...');
+  const ms=await F.getDoc(D('meta'));const m=ms.exists()?ms.data():{ts:0};m.keys=m.keys||{};m.files=m.files||{};
+  if(!force&&ms.exists()&&m.ts!==(+LS.fb_ts||0)){
+   if(confirm(CONFLICT)){await pull(m);SS.setItem('fb_ready','1');location.reload();return}
+  }
+  for(const k of Object.keys(db)){
+   const s=JSON.stringify(db[k]);if(last[k]===s&&m.keys[k])continue;
+   const cs=chunk(s),b=F.writeBatch(fs);cs.forEach((c,i)=>b.set(D('d_'+k+'_'+i),{s:c}));await b.commit();
+   last[k]=s;m.keys[k]={n:cs.length}}
+  const sd=new Set(JSON.parse(LS.fb_docs||'[]'));
+  for(const k of await idbKeys()){
+   if(sd.has(k))continue;const id='f_'+hash(String(k));
+   if(m.files[id]){sd.add(k);continue}
+   const rec=await idbGet(k);if(!rec||!rec.blob)continue;
+   const cs=chunk(JSON.stringify({k:rec.k,name:rec.name,mime:rec.mime,b64:await b64(rec.blob)})),b=F.writeBatch(fs);
+   cs.forEach((c,i)=>b.set(D(id+'_'+i),{s:c}));await b.commit();m.files[id]={k,n:cs.length};sd.add(k)}
+  LS.setItem('fb_docs',JSON.stringify([...sd]));
+  m.ts=Date.now();await F.setDoc(D('meta'),m);
+  LS.setItem('fb_ts',String(m.ts));if(dirtyN===n0)LS.setItem('fb_dirty','0');
+  stat('\u2601 Synced');
+ }catch(e){console.warn('push',e);stat('\u26A0 Not saved - tap to retry',1)}
+ finally{pushing=false;if(again){again=false;setTimeout(()=>push(),300)}}
+}
+
+/* ---- pull (cloud -> device) ---- */
+async function pull(m){
+ gtxt('Loading your data...');stat('\u2601 Loading...');
+ const nd={};
+ await Promise.all(Object.keys(m.keys||{}).map(async k=>{
+  const r=await Promise.all(Array.from({length:m.keys[k].n},(_,i)=>F.getDoc(D('d_'+k+'_'+i))));
+  nd[k]=JSON.parse(r.map(x=>x.data().s).join(''))}));
+ const have=new Set(await idbKeys()),sd=new Set(JSON.parse(LS.fb_docs||'[]'));
+ for(const id of Object.keys(m.files||{})){
+  const f=m.files[id];sd.add(f.k);if(have.has(f.k))continue;
+  const r=await Promise.all(Array.from({length:f.n},(_,i)=>F.getDoc(D(id+'_'+i))));
+  await docsIn([JSON.parse(r.map(x=>x.data().s).join(''))])}
+ LS.setItem(KEY,JSON.stringify(nd));LS.setItem('fb_ts',String(m.ts));LS.setItem('fb_dirty','0');LS.setItem('fb_docs',JSON.stringify([...sd]));
+}
+
+/* ---- first load of a browser session ---- */
+async function startupSync(){
+ const ms=await F.getDoc(D('meta')),dirty=LS.fb_dirty==='1',synced=+LS.fb_ts||0;
+ if(!ms.exists()){if(hasLocal())await push(true);return}
+ const m=ms.data();
+ if(m.ts===synced){if(dirty)await push();return}
+ if((dirty||synced===0)&&hasLocal()){if(!confirm(CONFLICT)){await push(true);return}}
+ await pull(m);SS.setItem('fb_ready','1');location.reload();await new Promise(()=>{});
+}
+
+async function proceed(){
+ if(started)return;started=true;
+ try{
+  gtxt('Syncing...');
+  if(!SS.getItem('fb_ready'))await startupSync();
+  SS.setItem('fb_ready','1');
+  gate.style.display='none';readyRes();stat('\u2601 Synced');
+  if(LS.fb_dirty==='1')push();
+ }catch(e){console.warn(e);started=false;gtxt('Could not sync with the cloud.');er((e&&e.code)||(e&&e.message)||'');
+  $('fbForm').style.display='none';$('fbEr').insertAdjacentHTML('afterend','<button id="fbRt" style="margin-top:10px">Retry</button>');$('fbRt').onclick=()=>location.reload()}
+}
+
+/* ---- hooks into the existing app ---- */
+const _sv=window.save;window.save=function(){const r=_sv.apply(this,arguments);markDirty();return r};
+const _ar=window.applyRestore;if(_ar)window.applyRestore=function(){LS.setItem('fb_dirty','1');return _ar.apply(this,arguments)};
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&LS.fb_dirty==='1'&&started)push()});
+st.onclick=()=>{
+ if(st.dataset.bad){push();return}
+ if(confirm('Sign out of the cloud on this device? You will need the cloud email and password again.')){AU.signOut(auth).then(()=>{SS.clear();location.reload()})}};
+
+/* ---- boot ---- */
+(async function(){
+ try{
+  const [A,a,f]=await Promise.all([import(B+'firebase-app.js'),import(B+'firebase-auth.js'),import(B+'firebase-firestore.js')]);
+  AU=a;F=f;const app=A.initializeApp(CFG);
+  auth=AU.initializeAuth(app,{persistence:[AU.indexedDBLocalPersistence,AU.browserLocalPersistence]});
+  fs=F.initializeFirestore(app,{experimentalAutoDetectLongPolling:true});
+ }catch(e){console.warn(e);gtxt('Cannot connect to Firebase. Check the internet and try again.');
+  $('fbEr').insertAdjacentHTML('afterend','<button id="fbRt" style="margin-top:10px">Retry</button>');$('fbRt').onclick=()=>location.reload();return}
+ $('fbGo').onclick=async()=>{const e=$('fbE').value.trim(),p=$('fbP').value;if(!e||!p){er('Enter email and password.');return}
+  er('');$('fbGo').disabled=true;try{await AU.signInWithEmailAndPassword(auth,e,p)}catch(x){er(errTxt(x))}$('fbGo').disabled=false};
+ $('fbP').addEventListener('keydown',e=>{if(e.key==='Enter')$('fbGo').click()});
+ AU.onAuthStateChanged(auth,u=>{if(u){$('fbForm').style.display='none';proceed()}else{started=false;gate.style.display='flex';gtxt('Login with your cloud email and password.');$('fbForm').style.display='block'}});
+})();
 })();
 </script>
 </body></html>
