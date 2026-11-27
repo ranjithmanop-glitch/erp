@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src data:; script-src 'unsafe-inline' https://www.gstatic.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://*.googleapis.com https://*.firebaseio.com https://www.gstatic.com; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src data:; script-src 'unsafe-inline' https://www.gstatic.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://www.gstatic.com; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ERP</title>
 <style>
 :root{--green:#341857;--green2:#522295;--mint:#ebe5f7;--bg:#f2f1f6;--card:#fff;--ink:#251932;--muted:#746c80;--line:#dfdde7;--red:#b42318}
@@ -3935,6 +3935,107 @@ st.onclick=()=>{
   const u=db.users.find(x=>x.id===document.getElementById('rcUser').value);
   if(!u||u.role!=='Admin'){msg('Only the Admin password can be reset here. Other users: ask the Admin to reset it in the Admin Panel.');return}
   return _d.apply(this,arguments)};
+})();
+</script>
+<script>
+/* ===== V10: user names + access · Activity Log · Import from Excel · Delete/Undo · Auto Recovery · backup extras · logout fix ===== */
+(function(){
+const Qs=id=>document.getElementById(id),role=()=>current&&current.role,rr=()=>render(true);
+const sid=()=>new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
+window.rr=rr;
+/* --- logout fix: the saved session is cleared on every logout / auto-logout --- */
+const _au=window.audit;window.audit=function(a){if(/logout/i.test(String(a))){try{sessionStorage.removeItem('erp_sess')}catch(e){}}return _au.apply(this,arguments)};
+const _lo=window.logout;window.logout=async function(){try{sessionStorage.removeItem('erp_sess')}catch(e){}return _lo.apply(this,arguments)};
+/* --- menu + roles --- */
+['Activity Log','Import & Delete'].forEach(p=>{if(!NAV.includes(p))NAV.splice(Math.max(0,NAV.indexOf('Backup & Restore')),0,p);['Admin','Manager'].forEach(r=>{if(ROLE_PAGES[r]&&!ROLE_PAGES[r].includes(p))ROLE_PAGES[r].push(p)})});
+const T=()=>db.trash=db.trash||[],tput=(type,rec,why)=>T().unshift({id:Date.now()+Math.random(),type,rec:JSON.parse(JSON.stringify(rec)),at:new Date().toLocaleString(),by:current.id,why});
+/* --- Users (ledger style) + per-ID Access --- */
+const GR=[['Dashboard',[['Dashboard','Dashboard']]],['Inward',[['Gate Entry','Gate Entry']]],['Outward',[['New Sale Order','Customer Order'],['Confirm Sale Order','Confirm Order'],['Pending Orders','Pending Order'],['Transport','Transport']]],['Weigh Bridge',[['Weigh Bridge','Weigh Bridge']]],['Production Entry',[['Production Entry','Production Entry']]],['Purchase',[['Purchase Bills','Purchase'],['Purchase Summary','Purchase Summary'],['Payment Advice','Payment Advice']]],['Sales',[['Sales Bills','Sales'],['Sales Summary','Sales Summary']]],['Customer Receipts',[['Customer Receipts','Customer Receipts']]],['Stock',[['Stock','Stock']]],['Items & Masters',[['Items & Masters','Items & Masters']]],['Branches',[['Branches','Branches']]],['Reports',[['Reports','Reports']]],['Internal Audit',[['Internal Audit','Internal Audit']]],['Bill Settings',[['Bill of Supply','Bill of Supply Settings'],['Tax Bill','Tax Bill Settings']]],['Activity Log',[['Activity Log','Activity Log']]],['Import & Delete',[['Import & Delete','Import & Delete']]],['Backup & Restore',[['Backup & Restore','Backup & Restore']]]];
+const eff=u=>u.access?[...new Set(['Dashboard','Change Password',...u.access])]:null;
+const _r=window.render;
+window.render=function(){const u=current,a=u&&u.role!=='Admin'&&eff(u);if(a){const o=ROLE_PAGES[u.role];ROLE_PAGES[u.role]=a;try{return _r.apply(this,arguments)}finally{ROLE_PAGES[u.role]=o}}return _r.apply(this,arguments)};
+const _dd=window.ddOpen;
+if(_dd)window.ddOpen=function(){const u=current,a=u&&u.role!=='Admin'&&eff(u);if(a){const o={};for(const k in SUB){o[k]=SUB[k];SUB[k]=SUB[k].filter(s=>a.includes(s[1]))}try{return _dd.apply(this,arguments)}finally{for(const k in o)SUB[k]=o[k]}}return _dd.apply(this,arguments)};
+let UE=null;
+const roleOpts=r=>['Accounts Staff','Manager','Admin'].map(x=>`<option${x===r?' selected':''}>${x}</option>`).join('');
+const usersCard=()=>`<div class="card"><h2>Users</h2><p class="muted">Create a login ID for each person (Weigh Bridge, Inward / Outward, Production, Manager ...). Use the Access button to choose exactly which menus that ID can open. <b>Admin</b>: everything, including users. Every other ID: only what you tick in Access.</p>
+<div class="formgrid"><input id="nuId" placeholder="User ID (e.g. weighbridge1)"><input id="nuName" placeholder="Name"><select id="nuRole">${roleOpts('Accounts Staff')}</select><input id="nuPin" type="password" inputmode="numeric" placeholder="PIN (6-12 digits)"><input id="nuPin2" type="password" inputmode="numeric" placeholder="Confirm PIN"><button onclick="uCreate()">Create User</button></div>
+<div class="tablewrap"><table><tr><th>User ID</th><th>Name</th><th>Role</th><th></th></tr>${db.users.map((x,i)=>`<tr><td>${esc(x.id)}${x.id===current.id?' (you)':''}</td><td>${esc(x.name||x.id)}</td><td>${esc(x.role)}</td><td style="white-space:nowrap"><button class="secondary" onclick="uEdit(${i})">✎ Edit</button> ${x.role==='Admin'?'':`<button class="secondary" onclick="uAcc(${i})">🔐 Access${x.access?' ✔':''}</button> `}<button class="secondary" onclick="uPin(${i})">Reset PIN</button>${x.id===current.id?'':` <button class="secondary" style="color:#b42318" onclick="delUser(${i})">✕</button>`}</td></tr>${UE===i?`<tr><td colspan="4"><div class="formgrid"><input id="ueName" value="${esc(x.name||'')}" placeholder="Name"><select id="ueRole">${roleOpts(x.role)}</select></div><div class="actions"><button onclick="uEditSave(${i})">Save</button><button class="secondary" onclick="uEdit(${i})">Cancel</button></div></td></tr>`:''}`).join('')}</table></div></div>`;
+window.uEdit=i=>{UE=UE===i?null:i;rr()};
+window.uEditSave=i=>{const u=db.users[i],r=Qs('ueRole').value;if(u.role==='Admin'&&r!=='Admin'&&admins()<2){alert('The last Admin cannot be changed.');return}u.name=Qs('ueName').value.trim();u.role=r;audit('Edit user',u.id+' ('+r+')');save();UE=null;rr()};
+window.uClose=()=>{const m=Qs('accModal');if(m)m.remove()};
+window.uAcc=i=>{const x=db.users[i];if(!x||x.role==='Admin')return;uClose();const cur=new Set(x.access||ROLE_PAGES[x.role]||[]),
+ cb=(l,k,ind)=>`<label style="display:flex;gap:10px;align-items:center;padding:6px 0 6px ${ind?22:0}px;font-weight:400;font-size:15px"><input type="checkbox" class="acck" value="${esc(k)}" style="width:20px;height:20px;flex:none"${cur.has(k)||k==='Dashboard'?' checked':''}${k==='Dashboard'?' disabled':''}>${esc(l)}</label>`;
+ const d=document.createElement('div');d.id='accModal';d.style.cssText='position:fixed;inset:0;background:#000a;z-index:9000;display:flex;align-items:center;justify-content:center;padding:14px';
+ d.innerHTML=`<div style="background:#fff;border-radius:14px;padding:18px;width:100%;max-width:380px;max-height:88vh;overflow:auto"><h2 style="margin:0 0 4px;color:var(--green)">Access: ${esc(x.id)} (${esc(x.role)})</h2><p class="muted" style="margin:0 0 8px">Tick the screens this ID can open. Only the ticked screens will be available to this person.</p><div style="display:flex;gap:8px;margin-bottom:6px"><button type="button" class="secondary" onclick="uAccAll(true)">Select all</button><button type="button" class="secondary" onclick="uAccAll(false)">Clear</button></div>${GR.map(([g,ch])=>ch.length===1&&ch[0][0]===g?cb(g,ch[0][1],0):`<div style="font-weight:700;padding-top:8px">${esc(g)}</div>${ch.map(c=>cb(c[0],c[1],1)).join('')}`).join('')}<div style="display:grid;gap:8px;margin-top:14px"><button type="button" class="secondary" onclick="uClose()">Cancel</button><button type="button" onclick="uAccSave(${i})">Save</button></div></div>`;
+ document.body.appendChild(d)};
+window.uAccAll=on=>document.querySelectorAll('#accModal .acck:not(:disabled)').forEach(c=>c.checked=on);
+window.uAccSave=i=>{const a=new Set(['Dashboard']);document.querySelectorAll('#accModal .acck:checked').forEach(c=>a.add(c.value));GR.forEach(([g,ch])=>{if(ch.some(c=>a.has(c[1])))a.add(g)});db.users[i].access=[...a];audit('Access changed',db.users[i].id);save();uClose();rr()};
+window.uCreate=async()=>{const id=Qs('nuId').value.trim(),nm=Qs('nuName').value.trim(),pin=Qs('nuPin').value,p2=Qs('nuPin2').value;
+ if(!/^[A-Za-z0-9._-]{3,30}$/.test(id)||db.users.some(x=>x.id.toLowerCase()===id.toLowerCase())){alert('Enter a unique User ID (3-30 letters / numbers).');return}
+ if(!/^\d{6,12}$/.test(pin)){alert('PIN must be 6 to 12 digits.');return}if(pin!==p2){alert('The two PINs do not match.');return}
+ const u={id,name:nm,role:Qs('nuRole').value,active:true,mustChange:false};if(u.role!=='Admin')u.access=['Dashboard'];await setPw(u,pin);db.users.push(u);audit('Create user',id+' ('+u.role+')');save();UE=null;rr();if(u.role!=='Admin')uAcc(db.users.length-1)};
+window.uPin=async i=>{const u=db.users[i],p=await askPass('New PIN for '+u.id+' (6-12 digits)');if(!p)return;if(!/^\d{6,12}$/.test(p)){alert('PIN must be 6 to 12 digits.');return}await setPw(u,p);u.mustChange=false;delete db.lock[u.id];audit('PIN reset',u.id);save();rr()};
+const _a=window.admin;window.admin=()=>{const h=_a(),k=h.indexOf('<div class="card" style="margin-top:14px"><h2>Security Settings');return'<div class="pagehead"><h1>Admin Panel</h1></div>'+usersCard()+(k>=0?h.slice(k):'')};
+/* --- Activity Log --- */
+const AL={u:'',q:''};
+window.alSet=(k,v)=>{AL[k]=v;rr()};
+const alRows=()=>{const rl={};db.users.forEach(x=>rl[x.id]=x.role);const q=AL.q.toLowerCase();return db.audit.filter(a=>(!AL.u||a.user===AL.u)&&(!q||JSON.stringify([a.user,a.action,a.detail]).toLowerCase().includes(q))).map(a=>[a.date,a.user,rl[a.user]||'',a.action,a.detail||''])};
+V['Activity Log']=()=>{const r=alRows();return`<div class="pagehead"><h1>Activity Log</h1></div><div class="card"><div class="formgrid"><select onchange="alSet('u',this.value)"><option value="">All users</option>${db.users.map(x=>`<option${x.id===AL.u?' selected':''}>${esc(x.id)}</option>`).join('')}</select><input placeholder="Search" value="${esc(AL.q)}" onchange="alSet('q',this.value)"><button class="secondary" onclick="alXls()">Download Excel</button></div><p class="muted">Latest ${Math.min(r.length,300)} of ${r.length} actions</p><div class="tablewrap"><table><tr><th>Date &amp; time</th><th>User</th><th>Role</th><th>Action</th><th>Details</th></tr>${r.slice(0,300).map(x=>`<tr>${x.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table></div></div>`};
+window.alXls=()=>saveXlsx('ERP_Activity_Log_'+sid()+'.xlsx',[['Date & time','User','Role','Action','Details'],...alRows()]);
+/* --- Excel / CSV reader (no internet needed) --- */
+const csv=t=>{const R=[];let r=[],c='',q=false;for(let i=0;i<t.length;i++){const h=t[i];if(q){if(h==='"'&&t[i+1]==='"'){c+='"';i++}else if(h==='"')q=false;else c+=h}else if(h==='"')q=true;else if(h===','){r.push(c);c=''}else if(h==='\n'||h==='\r'){if(h==='\r'&&t[i+1]==='\n')i++;r.push(c);R.push(r);r=[];c=''}else c+=h}if(c||r.length){r.push(c);R.push(r)}return R};
+const xlsx=async buf=>{const u=new Uint8Array(buf),dv=new DataView(buf),td=new TextDecoder();let e=u.length-22;while(e>=0&&dv.getUint32(e,true)!==0x06054b50)e--;if(e<0)throw new Error('Not a valid .xlsx file');
+ const n=dv.getUint16(e+10,true);let p=dv.getUint32(e+16,true);const F={};
+ for(let i=0;i<n;i++){const nl=dv.getUint16(p+28,true);F[td.decode(u.subarray(p+46,p+46+nl))]={m:dv.getUint16(p+10,true),cs:dv.getUint32(p+20,true),off:dv.getUint32(p+42,true)};p+=46+nl+dv.getUint16(p+30,true)+dv.getUint16(p+32,true)}
+ const get=async k=>{const f=F[k];if(!f)return null;const o=f.off,s=o+30+dv.getUint16(o+26,true)+dv.getUint16(o+28,true),d=u.subarray(s,s+f.cs);return f.m===0?td.decode(d):await new Response(new Blob([d]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text()};
+ const P=s=>new DOMParser().parseFromString(s,'text/xml'),ss=await get('xl/sharedStrings.xml'),S=ss?[...P(ss).getElementsByTagName('si')].map(x=>[...x.getElementsByTagName('t')].map(t=>t.textContent).join('')):[];
+ const sk=Object.keys(F).filter(k=>/^xl\/worksheets\/sheet\d+\.xml$/.test(k)).sort()[0];if(!sk)throw new Error('No sheet found in the file');
+ const R=[];[...P(await get(sk)).getElementsByTagName('row')].forEach(rw=>{const r=[];[...rw.getElementsByTagName('c')].forEach((c,j)=>{const L=(c.getAttribute('r')||'').replace(/\d/g,''),ci=L?[...L].reduce((a,ch)=>a*26+ch.charCodeAt(0)-64,0)-1:j,t=c.getAttribute('t'),v=c.getElementsByTagName('v')[0],is=c.getElementsByTagName('t')[0];r[ci]=t==='s'&&v?S[+v.textContent]:t==='inlineStr'&&is?is.textContent:v?v.textContent:''});R.push(r)});return R};
+const Hx=(h,...k)=>h.findIndex(x=>k.some(y=>String(x||'').toLowerCase().includes(y)));
+window.impGo=async inp=>{const f=inp.files[0];if(!f)return;
+ try{const nm=f.name.toLowerCase();if(!/\.(xlsx|csv)$/.test(nm))throw new Error('Please choose an .xlsx or .csv file (save an old .xls file as .xlsx first).');
+  const R=(nm.endsWith('.csv')?csv(await f.text()):await xlsx(await f.arrayBuffer())).filter(r=>r.some(c=>String(c||'').trim()));
+  if(R.length<2)throw new Error('The file has no data rows.');
+  const h=R[0].map(x=>String(x||'')),sel=Qs('impKind'),[type,kind]=sel.value.split(':'),ni=Hx(h,'name','party','customer','item');
+  if(ni<0)throw new Error('No "Name" column found. The first row must have headings like Name, City, Mobile.');
+  const ci=Hx(h,'city','place'),mi=Hx(h,'mobile','phone','contact'),gi=Hx(h,'gst'),ai=Hx(h,'address'),ui=Hx(h,'unit'),g=(r,i,d)=>i>=0?String(r[i]||d||'').trim():(d||'');
+  const ex=new Set(db[type].filter(x=>x.kind===kind).map(x=>String(x.name).trim().toUpperCase())),add=[];
+  R.slice(1).forEach(r=>{const name=g(r,ni),K=name.toUpperCase();if(!name||ex.has(K))return;ex.add(K);add.push(type==='items'?{name,unit:g(r,ui,'kg'),kind}:{name,city:g(r,ci),address:g(r,ai),mobile:g(r,mi),gst:g(r,gi),kind})});
+  if(!add.length){alert('Nothing new to import. All names already exist.');return}
+  if(!confirm('Import '+add.length+' new record(s) into: '+sel.selectedOptions[0].text+' ?'))return;
+  const id='imp'+Date.now();add.forEach(o=>{o.imp=id;db[type].push(o)});(db.imports=db.imports||[]).push({id,type,n:add.length,at:new Date().toLocaleString(),label:sel.selectedOptions[0].text});
+  audit('Import from Excel',add.length+' → '+sel.selectedOptions[0].text);save();alert('✔ Imported '+add.length+' record(s). Use "Undo last import" if this was a mistake.');rr()
+ }catch(e){alert('Import failed: '+(e&&e.message||e))}finally{inp.value=''}};
+window.impUndo=()=>{const im=(db.imports||[]).slice(-1)[0];if(!im){alert('There is no import to undo.');return}if(!confirm('Undo the last import ('+im.n+' records · '+im.label+' · '+im.at+')?'))return;
+ const a=db[im.type];let n=0;for(let i=a.length-1;i>=0;i--)if(a[i].imp===im.id){tput(im.type,a[i],'undo import');a.splice(i,1);n++}db.imports.pop();audit('Undo import',n+' removed');save();rr()};
+/* --- Delete / Undo entries (everything deleted goes to Auto Recovery) --- */
+const DT={type:'sales',party:'',q:'',sel:new Set()};window.DT=DT;
+const nmOf=x=>x.party||x.customer||'',noOf=x=>x.serial||x.billno||x.invoice||x.no||x.gate||'',amOf=x=>x.total||x.amount||x.net||'';
+const dRows=()=>(db[DT.type]||[]).filter(x=>(!DT.party||nmOf(x)===DT.party)&&(!DT.q||JSON.stringify(x).toLowerCase().includes(DT.q.toLowerCase())));
+const delIds=ids=>{const a=db[DT.type];let n=0;ids.forEach(id=>{const i=a.findIndex(x=>x.id===id);if(i>=0){tput(DT.type,a[i],'deleted');a.splice(i,1);n++}});audit('Delete entries',DT.type+' × '+n);save();DT.sel.clear();rr()};
+window.dtSet=(k,v)=>{DT[k]=v;if(k==='type'){DT.party='';DT.sel.clear()}rr()};
+window.dtTick=(id,on)=>{on?DT.sel.add(id):DT.sel.delete(id);rr()};
+window.dtAll=()=>{dRows().slice(0,300).forEach(x=>DT.sel.add(x.id));rr()};window.dtNone=()=>{DT.sel.clear();rr()};
+window.dtDel=id=>{if(confirm('Delete this entry? It is kept in Auto Recovery.'))delIds([id])};
+window.dtDelSel=()=>{if(DT.sel.size&&confirm('Delete '+DT.sel.size+' selected entries? They are kept in Auto Recovery.'))delIds([...DT.sel])};
+window.dtDelAll=()=>{if(role()!=='Admin'){alert('Only Admin can delete all entries.');return}if(prompt('Type DELETE to remove ALL '+DT.type+' entries.\nThey are kept in Auto Recovery.')==='DELETE')delIds((db[DT.type]||[]).map(x=>x.id))};
+V['Import & Delete']=()=>{const r=dRows(),pt=[...new Set((db[DT.type]||[]).map(nmOf).filter(Boolean))].sort();return`<div class="pagehead"><h1>Import &amp; Delete</h1></div>
+<div class="card"><h2>Import from Excel</h2><p class="muted">Choose an Excel (.xlsx) or .csv file. The first row must have headings such as Name, City, Mobile, GST, Address (Unit for items). Names that already exist are skipped.</p><div class="formgrid"><select id="impKind"><option value="parties:sales">Sales Customers</option><option value="parties:purchase">Purchase Parties</option><option value="items:sales">Sales Items</option><option value="items:purchase">Purchase Items</option></select><input id="impFile" type="file" accept=".xlsx,.csv" onchange="impGo(this)"></div></div>
+<div class="card" style="margin-top:14px"><h2>Delete / Undo Entries</h2><p class="muted">Added or imported something by mistake? Undo the last import, tick entries and delete them together, or delete one by one. Deleted entries are kept in Auto Recovery (Backup page). Download a backup first.</p><div class="actions"><button class="secondary" onclick="impUndo()">↩ Undo last import</button></div>
+<div class="formgrid"><select onchange="dtSet('type',this.value)"><option value="sales"${DT.type==='sales'?' selected':''}>Sales bills</option><option value="purchases"${DT.type==='purchases'?' selected':''}>Purchase bills</option></select><select onchange="dtSet('party',this.value)"><option value="">All parties</option>${pt.map(p=>`<option${p===DT.party?' selected':''}>${esc(p)}</option>`).join('')}</select><input placeholder="Search" value="${esc(DT.q)}" onchange="dtSet('q',this.value)"></div>
+<div class="actions"><button class="secondary" onclick="dtAll()">Select all shown</button><button class="secondary" onclick="dtNone()">Clear selection</button><button class="danger" onclick="dtDelSel()">Delete selected (${DT.sel.size})</button></div><p class="muted">${r.length} entries${r.length>300?' (first 300 shown)':''}</p>
+<div class="tablewrap"><table><tr><th></th><th>Date</th><th>No.</th><th>Party</th><th>Amount</th><th></th></tr>${r.slice(0,300).map(x=>`<tr><td><input type="checkbox" style="width:auto"${DT.sel.has(x.id)?' checked':''} onchange="dtTick('${esc(x.id)}',this.checked)"></td><td>${esc(x.date||'')}</td><td>${esc(noOf(x))}</td><td>${esc(nmOf(x))}</td><td>${esc(amOf(x))}</td><td><button class="danger" onclick="dtDel('${esc(x.id)}')">✕</button></td></tr>`).join('')}</table></div>
+${role()==='Admin'?'<div class="actions"><button class="danger" onclick="dtDelAll()">Delete ALL entries (this type)</button></div>':''}</div>`};
+/* --- Backup page extras: Auto Recovery, WhatsApp, software code, Excel --- */
+window.arRestore=()=>{const s=Qs('arSel');if(!s||!s.value){alert('Nothing selected.');return}const i=T().findIndex(x=>String(x.id)===s.value);if(i<0)return;const x=T()[i];(db[x.type]=db[x.type]||[]).push(x.rec);T().splice(i,1);audit('Auto Recovery restore',x.type);save();alert('✔ Restored.');rr()};
+window.dlCode=async quiet=>{try{const r=await fetch(location.href.split('#')[0],{cache:'no-store'});if(!r.ok)throw 0;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([await r.text()],{type:'text/html'}));a.download='ERP_Software_'+sid()+'.html';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}catch(e){if(!quiet)alert('The software code file can be downloaded only when the app is opened from the website.')}};
+window.bkWA=async()=>{try{const o=await window.pack(),f=new File([JSON.stringify(o)],'ERP_Backup_'+sid()+'.json',{type:'application/json'});if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'ERP Backup'});db.settings.lastDl=today();save();rr()}else{alert('Sharing is not supported on this device. The backup file will be downloaded - send it from WhatsApp.');await window.fullBackup()}}catch(e){if(e&&e.name!=='AbortError')alert('Could not share: '+(e.message||e))}};
+window.bkXls=()=>{const rows=[['ERP BACKUP',new Date().toLocaleString()]];['parties','items','purchases','sales','payments','advices'].forEach(k=>{const a=db[k]||[];if(!a.length)return;const ks=[...new Set(a.flatMap(x=>Object.keys(x).filter(f=>typeof x[f]!=='object')))];rows.push([],[k.toUpperCase()+' ('+a.length+')'],ks,...a.map(x=>ks.map(f=>x[f]??'')))});saveXlsx('ERP_Backup_'+sid()+'.xlsx',rows)};
+const _fb=window.fullBackup;window.fullBackup=async function(){await _fb.apply(this,arguments);if(localStorage.getItem('erp_code')!=='0')await window.dlCode(true)};
+const _bk=V['Backup & Restore'];
+V['Backup & Restore']=()=>_bk()+`<div class="card" style="margin-top:14px"><h2>More backup options</h2><p class="muted">Last backup: <b>${esc(db.settings.lastDl||'Never')}</b></p><div class="actions"><button onclick="fullBackup()">⬇ Download Full Backup</button><button class="secondary" onclick="bkWA()">Send backup to WhatsApp</button><button class="secondary" onclick="bkXls()">Download Backup (Excel)</button><button class="secondary" onclick="dlCode()">Download Software Code (HTML)</button></div><label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" style="width:auto"${localStorage.getItem('erp_code')!=='0'?' checked':''} onchange="localStorage.setItem('erp_code',this.checked?'1':'0')"> Also save the software code file with every full backup</label></div>
+<div class="card" style="margin-top:14px"><h2>Auto Recovery</h2><p class="muted">Anything deleted from Import &amp; Delete is kept here first. If something was deleted by mistake, choose it and tap Restore.</p><div class="formgrid"><select id="arSel">${T().length?T().slice(0,300).map(x=>`<option value="${x.id}">${esc(x.at)} · ${esc(x.type)} · ${esc(nmOf(x.rec)||x.rec.name||'')} ${esc(noOf(x.rec))}</option>`).join(''):'<option value="">No deleted records</option>'}</select><button class="secondary" onclick="arRestore()">Restore selected</button></div></div>`;
 })();
 </script>
 </body></html>
